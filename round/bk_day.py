@@ -14,7 +14,7 @@ import re
 # ================== 参数 ==================
 TOP_K = 20
 OUTPUT_XLSX = "html/bk_day.xlsx"
-OUT_HTML = "html/bk_day.html"
+OUT_HTML = "html/bk_day_top.html"
 
 # ================== HTML 输出控制 ==================
 GEN_HTML_TOPBOTTOM = True      # 生成 bk_day.html（现有）
@@ -316,7 +316,7 @@ def main():
         tbody += "</tr>"
 
     table_html = f'<div class="table-wrap"><table><thead>{thead}</thead><tbody>{tbody}</tbody></table></div>'
-    html_page = f"<!DOCTYPE html><html lang='zh-CN'><head><meta charset='utf-8'><title>板块排名跟踪</title>{STYLE}</head><body>{table_html}{SCRIPT}</body></html>"
+    html_page = f"<!DOCTYPE html><html lang='zh-CN'><head><meta charset='utf-8'><title>Top</title>{STYLE}</head><body>{table_html}{SCRIPT}</body></html>"
     Path(OUT_HTML).write_text(html_page, encoding="utf-8")
     print(f"[OK] HTML 已生成：{OUT_HTML}")
 
@@ -373,9 +373,9 @@ def main():
         tbody += "</tr>"
 
     table_html = f'<div class="table-wrap"><table><thead>{thead}</thead><tbody>{tbody}</tbody></table></div>'
-    html_page = f"<!DOCTYPE html><html lang='zh-CN'><head><meta charset='utf-8'><title>AllData 板块排名跟踪</title>{STYLE}</head><body>{table_html}{SCRIPT}</body></html>"
-    Path("html/bk_day_all.html").write_text(html_page, encoding="utf-8")
-    print("[OK] AllData HTML 已生成：html/bk_day_all.html")
+    html_page = f"<!DOCTYPE html><html lang='zh-CN'><head><meta charset='utf-8'><title>Info</title>{STYLE}</head><body>{table_html}{SCRIPT}</body></html>"
+    Path("html/bk_day_info.html").write_text(html_page, encoding="utf-8")
+    print("[OK] AllData HTML 已生成：html/bk_day_info.html")
 
 
         # ---------- AllData Rank HTML（仅涨跌幅，完整排名） ----------
@@ -444,7 +444,7 @@ def main():
     <html lang="zh-CN">
     <head>
     <meta charset="utf-8">
-    <title>AllData 板块完整排名</title>
+    <title>Rank</title>
     {STYLE}
     </head>
     <body>
