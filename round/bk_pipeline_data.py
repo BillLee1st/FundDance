@@ -2,13 +2,14 @@
 # -*- coding: utf-8 -*-
 
 """
-整合后的 A股板块抓取脚本（Eastmoney）
-- 保留原脚本抓取逻辑（push2his / clist/get）
-- CSV 不存在 → 全量历史（基线）
-- CSV 存在 → 今日列批量抓取（增量）
-- 今日列失败保留旧值
-- 支持 Pass2 二轮补抓
-- 最近交易日判断，非交易日回退至最近交易日
+A股板块抓取（Eastmoney，批量抓“今天” + 稳健二轮 + 基线建一次）
+- CSV 不存在（基线）：抓最近 N 天（push2his），建立全量历史（一次性）
+- CSV 存在（增量）：今天列改为【clist/get 批量抓】（一次请求覆盖全部板块）
+- 单元格：rank|pct_chg|value（value≈最新价，收盘后即收盘价；盘中为最新成交价）
+- 失败保护：今天列若已有旧值，本次失败/空值将保留旧值
+- 二轮补抓：仅用于“基线”或你切换到 his 模式时；默认今天用批量抓无需二轮
+- 日志：每个阶段打印单行日志；支持 --verbose-http 打印 HTTP 细节
+- Ctrl+C：中断时已获取的数据也会写回今天列
 """
 
 import os, sys, time, math, random, argparse, signal
@@ -33,9 +34,10 @@ HEADERS = {
     "Connection": "keep-alive",
 }
 
-LIST_URL   = "https://push2.eastmoney.com/api/qt/clist/get"
-KLINE_URL  = "https://push2his.eastmoney.com/api/qt/stock/kline/get"
-BOARD_FS   = "m:90+t:2"
+LIST_URL   = "https://push2.eastmoney.com/api/qt/clist/get"           # 批量列表（今天用它）
+KLINE_URL  = "https://push2his.eastmoney.com/api/qt/stock/kline/get"  # 历史K线（仅基线）
+BOARD_FS   = "m:90+t:2"     # 行业
+# BOARD_FS   = "m:90+t:3"     # 概念
 OUTPUT_CSV = "data_daily.csv"
 
 INTERRUPTED = False
@@ -43,6 +45,7 @@ def _sigint_handler(signum, frame):
     global INTERRUPTED
     INTERRUPTED = True
 signal.signal(signal.SIGINT, _sigint_handler)
+
 
 # =============== HTTP & throttle helpers ===============
 def build_session(timeout_s: float) -> requests.Session:
@@ -59,21 +62,24 @@ def build_session(timeout_s: float) -> requests.Session:
     adapter = HTTPAdapter(max_retries=retry, pool_connections=16, pool_maxsize=16)
     s.mount("http://", adapter)
     s.mount("https://", adapter)
-    s.request_timeout = timeout_s
+    s.request_timeout = timeout_s  # 自定义属性
     return s
 
+
 def polite_sleep(min_interval_s: float, base_sleep: float, jitter: float, last_ts_holder: list):
+    """满足 rpm 的最小间隔，再叠加自定义等待与抖动。"""
     now = time.time()
     last_ts = last_ts_holder[0]
     need = 0.0
     if last_ts is not None:
         elapsed = now - last_ts
         if elapsed < min_interval_s:
-            need = min_interval_s - elapsed
+            need = (min_interval_s - elapsed)
     total = max(0.0, need) + max(0.0, base_sleep) + (random.random() * max(0.0, jitter))
     if total > 0:
         time.sleep(total)
     last_ts_holder[0] = time.time()
+
 
 # =============== Eastmoney fetchers ===============
 def http_get(session: requests.Session, url: str, params: dict, verbose_http: bool) -> requests.Response:
@@ -82,56 +88,201 @@ def http_get(session: requests.Session, url: str, params: dict, verbose_http: bo
     dt = (time.time() - t0) * 1000.0
     if verbose_http:
         path = url.split("//", 1)[-1].split("/", 1)[-1]
+        # 只打印关键字段，避免超长
         log_params = {k: params.get(k) for k in ("fs","secid","beg","end","klt","lmt")}
         print(f"[http] GET /{path} {log_params} -> {resp.status_code} ({dt:.0f}ms)")
     return resp
 
-def fetch_board_list_basic(session: requests.Session, fs: str, verbose_http: bool) -> List[Tuple[str, str]]:
-    params = {
-        "pn": 1, "pz": 500, "po": 1, "np": 1,
-        "fltt": 2, "invt": 2, "fid": "f3",
-        "fs": fs,
-        "fields": "f12,f14",
-    }
-    r = http_get(session, LIST_URL, params, verbose_http)
-    r.raise_for_status()
-    diff = r.json().get("data", {}).get("diff", []) or []
-    return [(it.get("f12"), it.get("f14")) for it in diff if it.get("f12") and it.get("f14")]
 
-def fetch_board_list_today(session: requests.Session, fs: str, verbose_http: bool) -> pd.DataFrame:
-    params = {
-        "pn": 1, "pz": 500, "po": 1, "np": 1,
-        "fltt": 2, "invt": 2, "fid": "f3",
-        "fs": fs,
-        "fields": "f12,f14,f2,f3",
-    }
-    r = http_get(session, LIST_URL, params, verbose_http)
-    r.raise_for_status()
-    diff = r.json().get("data", {}).get("diff", []) or []
+# def fetch_board_list_basic(session: requests.Session, fs: str, verbose_http: bool) -> List[Tuple[str, str]]:
+#     """仅拿代码与名称（用于基线准备）"""
+#     params = {
+#         "pn": 1, "pz": 500, "po": 1, "np": 1,
+#         "fltt": 2, "invt": 2, "fid": "f3",
+#         "fs": fs,
+#         "fields": "f12,f14",
+#     }
+#     r = http_get(session, LIST_URL, params, verbose_http)
+#     r.raise_for_status()
+#     diff = r.json().get("data", {}).get("diff", []) or []
+#     return [(it.get("f12"), it.get("f14")) for it in diff if it.get("f12") and it.get("f14")]
+
+
+def fetch_board_list_basic(
+    session: requests.Session,
+    fs: str,
+    verbose_http: bool,
+    page_size: int = 100,
+    max_pages: int = 50,
+) -> List[Tuple[str, str]]:
+    """
+    自动分页获取所有板块 (bk_code, bk_name)
+    clist/get 实际每页最多 100 条，pz>100 无效
+    """
+
+    all_rows: List[Tuple[str, str]] = []
+    seen = set()
+
+    for pn in range(1, max_pages + 1):
+        params = {
+            "pn": pn,
+            "pz": page_size,   # 实际最大 100
+            "po": 1,
+            "np": 1,
+            "fltt": 2,
+            "invt": 2,
+            "fid": "f3",
+            "fs": fs,
+            "fields": "f12,f14",
+        }
+
+        r = http_get(session, LIST_URL, params, verbose_http)
+        r.raise_for_status()
+
+        data = r.json().get("data") or {}
+        diff = data.get("diff") or []
+
+        if not diff:
+            if verbose_http:
+                print(f"[info] page {pn}: empty diff, stop paging")
+            break
+
+        new_cnt = 0
+        for it in diff:
+            code = it.get("f12")
+            name = it.get("f14")
+            if not code or not name:
+                continue
+            key = (code, name)
+            if key in seen:
+                continue
+            seen.add(key)
+            all_rows.append(key)
+            new_cnt += 1
+
+        if verbose_http:
+            total = data.get("total")
+            print(f"[info] page {pn}: fetched={len(diff)}, new={new_cnt}, total={total}")
+
+        # 已拿完
+        total = data.get("total")
+        if total and len(all_rows) >= total:
+            break
+
+    return all_rows
+
+
+def fetch_board_list_today(
+    session: requests.Session,
+    fs: str,
+    verbose_http: bool,
+    page_size: int = 100,
+    max_pages: int = 50,
+) -> pd.DataFrame:
+    """
+    分页批量获取所有板块的“最新价 & 涨跌幅(%)”
+    - clist/get 单页最大 100 条
+    - 自动翻页直到拿全
+    - 打印抓取数量日志
+    """
+
     rows = []
-    for it in diff:
-        code = it.get("f12"); name = it.get("f14")
-        if not code or not name:
-            continue
-        try: close = float(it.get("f2")) if it.get("f2") not in (None,"","--") else math.nan
-        except: close = math.nan
-        try: pct = float(it.get("f3")) if it.get("f3") not in (None,"","--") else math.nan
-        except: pct = math.nan
-        rows.append({"bk_code": code, "bk_name": name, "close": close, "pct_chg": pct})
-    return pd.DataFrame(rows)
+    seen = set()
+
+    for pn in range(1, max_pages + 1):
+        params = {
+            "pn": pn,
+            "pz": page_size,   # 实际最大 100
+            "po": 1,
+            "np": 1,
+            "fltt": 2,
+            "invt": 2,
+            "fid": "f3",
+            "fs": fs,
+            "fields": "f12,f14,f2,f3",
+        }
+
+        r = http_get(session, LIST_URL, params, verbose_http)
+        r.raise_for_status()
+
+        data = r.json().get("data") or {}
+        diff = data.get("diff") or []
+
+        if not diff:
+            print(f"[info] today clist page {pn}: empty diff, stop paging")
+            break
+
+        page_new = 0
+        for it in diff:
+            code = it.get("f12")
+            name = it.get("f14")
+            if not code or not name:
+                continue
+
+            key = (code, name)
+            if key in seen:
+                continue
+            seen.add(key)
+
+            try:
+                close = float(it.get("f2")) if it.get("f2") not in (None, "", "--") else math.nan
+            except Exception:
+                close = math.nan
+
+            try:
+                pct = float(it.get("f3")) if it.get("f3") not in (None, "", "--") else math.nan
+            except Exception:
+                pct = math.nan
+
+            rows.append({
+                "bk_code": code,
+                "bk_name": name,
+                "close": close,
+                "pct_chg": pct,
+            })
+            page_new += 1
+
+        total = data.get("total")
+        print(
+            f"[info] today clist page {pn}: "
+            f"fetched={len(diff)}, new={page_new}, "
+            f"accumulated={len(rows)}, total={total}"
+        )
+
+        # 已抓全
+        if total and len(rows) >= total:
+            break
+
+    df = pd.DataFrame(rows)
+    print(f"[summary] today clist fetched rows={len(df)}")
+
+    return df
+
+
+
 
 def _parse_klines(kl):
+    """
+    fields2：
+    0 f51=日期, 1 f52=开盘, 2 f53=收盘, 3 f54=最高, 4 f55=最低,
+    5 f56=成交量, 6 f57=成交额, 7 f58=振幅, 8 f59=涨跌幅(%), 9 f60=涨跌额, 10 f61=换手率
+    """
     recs = []
     for row in kl or []:
         parts = row.split(",")
         if len(parts) >= 11:
             date = parts[0]
-            try: close = float(parts[2]) if parts[2] != "" else math.nan
-            except: close = math.nan
-            try: pct = float(parts[8]) if parts[8] != "" else math.nan
-            except: pct = math.nan
+            try:
+                close = float(parts[2]) if parts[2] != "" else math.nan
+            except ValueError:
+                close = math.nan
+            try:
+                pct = float(parts[8]) if parts[8] != "" else math.nan
+            except ValueError:
+                pct = math.nan
             recs.append((date, pct, close))
     return recs
+
 
 def _fetch_range(session: requests.Session, bk_code: str, beg: str, end: str, verbose_http: bool):
     params = {
@@ -146,17 +297,19 @@ def _fetch_range(session: requests.Session, bk_code: str, beg: str, end: str, ve
     kl = (r.json().get("data") or {}).get("klines")
     return _parse_klines(kl)
 
+
 # =============== cell helpers ===============
 def fmt_cell(rank: Optional[int], pct: Optional[float], close: Optional[float]) -> str:
     r = "" if rank is None else str(int(rank))
-    p = "" if pct is None or (isinstance(pct,float) and math.isnan(pct)) else f"{pct:.2f}"
-    if close is None or (isinstance(close,float) and math.isnan(close)):
+    p = "" if pct is None or (isinstance(pct, float) and math.isnan(pct)) else f"{pct:.2f}"
+    if close is None or (isinstance(close, float) and math.isnan(close)):
         c = ""
     else:
         c = f"{close:.4f}".rstrip("0").rstrip(".")
     if not r and not p and not c:
         return ""
     return f"{r}|{p}|{c}"
+
 
 # =============== write helpers ===============
 def write_baseline(all_rows: list, out_csv: str):
@@ -172,39 +325,132 @@ def write_baseline(all_rows: list, out_csv: str):
     pv.to_csv(out_csv, encoding="utf-8-sig", index_label="row_key")
     print(f"[done] wrote baseline to {out_csv}")
 
+
+# def patch_today(wide: pd.DataFrame, df_today: pd.DataFrame, today_col: str, out_csv: str):
+#     """将 df_today 写入今天列；新值为空则保留旧值。"""
+#     df_today = df_today.copy()
+#     if df_today["pct_chg"].notna().any():
+#         df_today["rank"] = df_today["pct_chg"].rank(ascending=False, method="first")
+#     else:
+#         df_today["rank"] = pd.NA
+#     df_today["row_key"] = df_today["bk_code"] + "|" + df_today["bk_name"]
+#     df_today["cell_new"] = df_today.apply(
+#         lambda r: fmt_cell(int(r["rank"]) if pd.notna(r["rank"]) else None, r["pct_chg"], r["close"]), axis=1
+#     )
+
+#     old_col = wide.get(today_col)
+#     series_new = df_today.set_index("row_key")["cell_new"]
+#     if old_col is None:
+#         wide[today_col] = series_new
+#     else:
+#         combined = old_col.copy()
+#         mask = series_new.notna() & (series_new.str.len() > 0)
+#         combined.loc[mask] = series_new.loc[mask]
+#         wide[today_col] = combined
+
+#     # 列排序（按日期）
+#     def _to_dt(x):
+#         try: return pd.to_datetime(x)
+#         except Exception: return pd.NaT
+#     cols_dt = pd.Series({c: _to_dt(c) for c in wide.columns})
+#     date_cols  = cols_dt[cols_dt.notna()].sort_values().index.tolist()
+#     other_cols = [c for c in wide.columns if c not in date_cols]
+#     wide = wide[date_cols + other_cols] if other_cols else wide[date_cols]
+#     wide.to_csv(out_csv, encoding="utf-8-sig", index_label="row_key")
+#     print(f"[done] patched today({today_col}) into {out_csv}")
+
 def patch_today(wide: pd.DataFrame, df_today: pd.DataFrame, today_col: str, out_csv: str):
+    """
+    TODAY 更新规则：
+    1) 接口有的数据 → 更新
+    2) 接口缺失但 CSV 里今天已有 → 保留
+    3) 接口缺失且 CSV 里今天为空 → 保持空
+    4) 接口新增板块 → 追加新行
+    """
+
     df_today = df_today.copy()
+
+    # ===== 1. rank =====
     if df_today["pct_chg"].notna().any():
-        df_today["rank"] = df_today["pct_chg"].rank(ascending=False, method="first")
+        df_today["rank"] = df_today["pct_chg"].rank(
+            ascending=False, method="first"
+        )
     else:
         df_today["rank"] = pd.NA
+
     df_today["row_key"] = df_today["bk_code"] + "|" + df_today["bk_name"]
     df_today["cell_new"] = df_today.apply(
-        lambda r: fmt_cell(int(r["rank"]) if pd.notna(r["rank"]) else None, r["pct_chg"], r["close"]), axis=1
+        lambda r: fmt_cell(
+            int(r["rank"]) if pd.notna(r["rank"]) else None,
+            r["pct_chg"],
+            r["close"],
+        ),
+        axis=1,
     )
 
-    old_col = wide.get(today_col)
-    series_new = df_today.set_index("row_key")["cell_new"]
-    if old_col is None:
-        wide[today_col] = series_new
-    else:
-        combined = old_col.copy()
-        mask = series_new.notna() & (series_new.str.len() > 0)
-        combined.loc[mask] = series_new.loc[mask]
-        wide[today_col] = combined
+    new_series = df_today.set_index("row_key")["cell_new"]
 
-    # 列排序
+    # ===== 2. 确保 wide index =====
+    if wide.index.name != "row_key":
+        wide.index.name = "row_key"
+
+    # ===== 3. 追加新增板块 =====
+    new_keys = new_series.index.difference(wide.index)
+    if len(new_keys) > 0:
+        print(f"[info] new boards today: {len(new_keys)}")
+        for k in new_keys:
+            print(f"  + {k}")
+
+        # 创建空行并 append
+        append_df = pd.DataFrame(index=new_keys, columns=wide.columns)
+        wide = pd.concat([wide, append_df])
+
+    # ===== 异常检测：接口缺失但 CSV 今天已有 =====
+    if today_col in wide.columns:
+        existing_today = wide[today_col]
+        missing_keys = wide.index.difference(new_series.index)
+
+        # CSV 里今天有值，但接口没返回
+        abnormal_keys = [
+            k for k in missing_keys
+            if pd.notna(existing_today.get(k)) and str(existing_today.get(k)).strip() != ""
+        ]
+
+        if abnormal_keys:
+            print(f"[warn] {len(abnormal_keys)} boards missing from API but kept from CSV:")
+            for k in abnormal_keys:
+                print(f"  ! {k}")
+
+
+    # ===== 4. 写 today 列（仅覆盖接口返回的）=====
+    if today_col not in wide.columns:
+        wide[today_col] = ""
+
+    # 对齐索引
+    aligned_new = new_series.reindex(wide.index)
+
+    # 只覆盖「接口实际返回的非空值」
+    mask = aligned_new.notna() & (aligned_new.str.len() > 0)
+    wide.loc[mask, today_col] = aligned_new.loc[mask]
+
+    # ===== 5. 日期列排序 =====
     def _to_dt(x):
-        try: return pd.to_datetime(x)
-        except: return pd.NaT
-    cols_dt = pd.Series({c:_to_dt(c) for c in wide.columns})
-    date_cols  = cols_dt[cols_dt.notna()].sort_values().index.tolist()
+        try:
+            return pd.to_datetime(x)
+        except Exception:
+            return pd.NaT
+
+    cols_dt = pd.Series({c: _to_dt(c) for c in wide.columns})
+    date_cols = cols_dt[cols_dt.notna()].sort_values().index.tolist()
     other_cols = [c for c in wide.columns if c not in date_cols]
     wide = wide[date_cols + other_cols] if other_cols else wide[date_cols]
+
     wide.to_csv(out_csv, encoding="utf-8-sig", index_label="row_key")
     print(f"[done] patched today({today_col}) into {out_csv}")
 
-# =============== main logic ===============
+
+
+# =============== main ===============
 def build_csv(
     fs: str,
     n_days: int,
@@ -221,13 +467,26 @@ def build_csv(
     today_mode: str,
 ):
     session = build_session(timeout_s)
+
+    # today = datetime.now().date()
+    # today_str = today.strftime("%Y%m%d")
+    # today_col = today.strftime("%Y-%m-%d")
+        # 获取今天日期
     now = datetime.now().date()
+
+    # 假设东财接口返回的是最近交易日（若今天非交易日，返回前一个交易日）
+    # pd.Timestamp + BDay(0) 会返回最近交易日（包括今天）
     last_trade_day = (pd.Timestamp(now) - BDay(0)).date()
+
+    # 接口请求的日期字符串
     today_str = last_trade_day.strftime("%Y%m%d")
+
+    # 对应写入的列名
     today_col = last_trade_day.strftime("%Y-%m-%d")
+
     print(f"[info] updating data for trading day: {today_col}")
 
-    # 读 CSV
+    # 读旧CSV
     if os.path.exists(out_csv):
         wide = pd.read_csv(out_csv, index_col=0)
         wide.columns = [str(c) for c in wide.columns]
@@ -236,133 +495,206 @@ def build_csv(
         wide = pd.DataFrame()
         print("[info] No CSV found → full fetch to build baseline.")
 
-    # ===== baseline =====
+    # ====== 如果没有基线，先建一次（push2his；可能慢，但只做一次）======
     if wide.empty:
-        print("[stage] bootstrap baseline (push2his)…")
+        print("[stage] bootstrap baseline (push2his, may take time)…")
         boards = fetch_board_list_basic(session, fs, verbose_http)
         total = len(boards)
         print(f"[info] total boards (list): {total}")
 
-        min_interval_s = 60.0 / rpm if rpm > 0 else 0.0
+        # rpm 限速器
+        min_interval_s = 60.0 / rpm if rpm and rpm > 0 else 0.0
         last_ts_holder = [None]
+
         all_rows = []
         consec_fail = 0
-
         for i, (code, name) in enumerate(boards, start=1):
-            if INTERRUPTED: break
+            if INTERRUPTED:
+                print("[warn] interrupted, flushing baseline…")
+                break
             polite_sleep(min_interval_s, sleep_s, jitter_s, last_ts_holder)
-            ok=False; recs=None; err=None; backoff=0.6
+
+            ok = False; err = None; recs = None
+            backoff = 0.6
             for attempt in range(RETRY_TIMES):
                 try:
                     beg = (last_trade_day - pd.Timedelta(days=n_days*2)).strftime("%Y%m%d")
                     recs = _fetch_range(session, code, beg, today_str, verbose_http)
-                    ok=True; break
-                except (ProxyError, ReqConnErr, ReadTimeout) as e: err=e; time.sleep(backoff + random.random()*0.35); backoff*=2
-                except Exception as e: err=e; time.sleep(backoff); backoff*=2
+                    ok = True; break
+                except (ProxyError, ReqConnErr, ReadTimeout) as e:
+                    err = e; time.sleep(backoff + random.uniform(0, 0.35)); backoff *= 2
+                except Exception as e:
+                    err = e; time.sleep(backoff); backoff *= 2
+
             if ok and recs:
-                df = pd.DataFrame(recs, columns=["trade_date","pct_chg","close"])
-                df["bk_code"]=code; df["bk_name"]=name
-                all_rows.append(df); consec_fail=0
+                df = pd.DataFrame(recs, columns=["trade_date", "pct_chg", "close"])
+                df["bk_code"] = code; df["bk_name"] = name
+                all_rows.append(df); consec_fail = 0
                 print(f"[full {i:02d}/{total}] {code}|{name} ok ({len(recs)})")
             else:
-                consec_fail+=1
+                consec_fail += 1
                 print(f"[full {i:02d}/{total}] {code}|{name} FAIL: {err}")
-                if consec_fail>=cooldown_after: time.sleep(cooldown_secs); consec_fail=0
+                if consec_fail >= cooldown_after:
+                    print(f"[cooldown] consecutive fails={consec_fail} → sleep {cooldown_secs}s")
+                    time.sleep(cooldown_secs); consec_fail = 0
 
-        if all_rows: write_baseline(all_rows, out_csv)
+        if all_rows:
+            write_baseline(all_rows, out_csv)
         return
 
-    # ===== update today =====
-    if today_mode=="list":
-        print("[stage] fetch TODAY via clist/get…")
+    # ====== 有基线：今天列采用“批量抓”方案（默认）======
+    if today_mode == "list":
+        print("[stage] fetch TODAY via clist/get (one-shot for all boards)…")
         try:
             df_today = fetch_board_list_today(session, fs, verbose_http)
-            if df_today.empty: print("[warn] empty today column; keep old")
-            else: patch_today(wide, df_today, today_col, out_csv)
+            if df_today.empty:
+                print("[warn] clist/get returns empty, keep old today column.")
+            else:
+                patch_today(wide, df_today, today_col, out_csv)
             ok_n = df_today["pct_chg"].notna().sum() if not df_today.empty else 0
             total = len(df_today) if not df_today.empty else 0
             print(f"[summary] today (list): ok={ok_n}, total={total}, date={today_col}")
         except Exception as e:
-            print(f"[error] clist/get failed: {e}")
+            print(f"[error] clist/get failed: {e}  -> keep old today column")
         return
 
-    # ===== his per-board today =====
-    print("[stage] fetch TODAY via push2his per-board…")
+    # ====== 兼容：如果你强制 today_mode=his，仍走逐板块 his 日K ======
+    print("[stage] fetch TODAY via push2his per-board (compat mode)…")
     boards = fetch_board_list_basic(session, fs, verbose_http)
     total = len(boards)
-    min_interval_s = 60.0 / rpm if rpm > 0 else 0.0
+    print(f"[info] total boards (list): {total}")
+
+    min_interval_s = 60.0 / rpm if rpm and rpm > 0 else 0.0
     last_ts_holder = [None]
+
     rows_today: Dict[str, Dict] = {}
-    fails: List[Tuple[str,str]] = []
+    fails: List[Tuple[str, str]] = []
     consec_fail = 0
 
-    for i,(code,name) in enumerate(boards,start=1):
-        if INTERRUPTED: break
+    # Pass1
+    for i, (code, name) in enumerate(boards, start=1):
+        if INTERRUPTED:
+            print("[warn] interrupted by user during Pass1, flushing partial…")
+            break
         polite_sleep(min_interval_s, sleep_s, jitter_s, last_ts_holder)
-        ok=False; recs=None; err=None; backoff=0.6
+
+        ok = False; err = None; recs = None
+        backoff = 0.6
         for attempt in range(RETRY_TIMES):
-            try: recs=_fetch_range(session, code, today_str, today_str, verbose_http); ok=True; break
-            except (ProxyError, ReqConnErr, ReadTimeout) as e: err=e; time.sleep(backoff + random.random()*0.35); backoff*=2
-            except Exception as e: err=e; time.sleep(backoff); backoff*=2
+            try:
+                recs = _fetch_range(session, code, today_str, today_str, verbose_http)
+                ok = True; break
+            except (ProxyError, ReqConnErr, ReadTimeout) as e:
+                err = e; time.sleep(backoff + random.uniform(0, 0.35)); backoff *= 2
+            except Exception as e:
+                err = e; time.sleep(backoff); backoff *= 2
+
         if ok and recs:
-            _,pct,close = recs[0]
-            rows_today[code]={"bk_code":code,"bk_name":name,"pct_chg":pct,"close":close}
-            consec_fail=0; print(f"[today {i:02d}/{total}] {code}|{name} ok")
+            _, pct, close = recs[0]
+            rows_today[code] = {"bk_code": code, "bk_name": name, "pct_chg": pct, "close": close}
+            consec_fail = 0
+            print(f"[today {i:02d}/{total}] {code}|{name} ok")
         else:
-            rows_today[code]={"bk_code":code,"bk_name":name,"pct_chg":None,"close":None}
-            fails.append((code,name)); consec_fail+=1
+            rows_today[code] = {"bk_code": code, "bk_name": name, "pct_chg": None, "close": None}
+            fails.append((code, name))
+            consec_fail += 1
             print(f"[today {i:02d}/{total}] {code}|{name} FAIL: {err}")
-            if consec_fail>=cooldown_after: time.sleep(cooldown_secs); consec_fail=0
+            if consec_fail >= cooldown_after:
+                print(f"[cooldown] consecutive fails={consec_fail} → sleep {cooldown_secs}s")
+                time.sleep(cooldown_secs); consec_fail = 0
 
+    # Pass2（可选）
     if fails and not INTERRUPTED:
-        print(f"[info] Pass2 retry for {len(fails)} failed boards…")
+        print(f"[info] Pass2 retry for {len(fails)} failed boards (slower pacing)…")
         session2 = build_session(pass2_timeout)
-        min_interval_s2 = 60.0 / (rpm/2.0) if rpm>0 else 0.0
+        min_interval_s2 = 60.0 / (rpm/2.0) if rpm and rpm > 0 else 0.0
         last_ts_holder2 = [None]
-        for j,(code,name) in enumerate(fails,start=1):
-            if INTERRUPTED: break
-            polite_sleep(min_interval_s2, pass2_sleep, pass2_sleep/2, last_ts_holder2)
-            ok=False; recs=None; err=None; backoff=1.0
-            for attempt in range(RETRY_TIMES+1):
-                try: recs=_fetch_range(session2, code, today_str, today_str, verbose_http); ok=True; break
-                except (ProxyError, ReqConnErr, ReadTimeout) as e: err=e; time.sleep(backoff + random.random()*0.5); backoff*=2
-                except Exception as e: err=e; time.sleep(backoff); backoff*=2
-            if ok and recs:
-                _,pct,close = recs[0]; rows_today[code]={"bk_code":code,"bk_name":name,"pct_chg":pct,"close":close}; print(f"[pass2 {j:02d}/{len(fails)}] {code}|{name} ok")
-            else: print(f"[pass2 {j:02d}/{len(fails)}] {code}|{name} FAIL: {err}")
 
-    all_index = pd.Index([f"{c}|{n}" for c,n in boards], name="row_key")
-    if wide.index.name!="row_key": wide.index.name="row_key"
+        for j, (code, name) in enumerate(fails, start=1):
+            if INTERRUPTED:
+                print("[warn] interrupted by user during Pass2, flushing partial…")
+                break
+
+            polite_sleep(min_interval_s2, pass2_sleep, pass2_sleep/2, last_ts_holder2)
+
+            ok = False; err = None; recs = None
+            backoff = 1.0
+            for attempt in range(RETRY_TIMES + 1):
+                try:
+                    recs = _fetch_range(session2, code, today_str, today_str, verbose_http)
+                    ok = True; break
+                except (ProxyError, ReqConnErr, ReadTimeout) as e:
+                    err = e; time.sleep(backoff + random.uniform(0, 0.5)); backoff *= 2
+                except Exception as e:
+                    err = e; time.sleep(backoff); backoff *= 2
+
+            if ok and recs:
+                _, pct, close = recs[0]
+                rows_today[code] = {"bk_code": code, "bk_name": name, "pct_chg": pct, "close": close}
+                print(f"[pass2 {j:02d}/{len(fails)}] {code}|{name} ok")
+            else:
+                print(f"[pass2 {j:02d}/{len(fails)}] {code}|{name} FAIL: {err}")
+
+    # 写回
+    # 确保索引齐全
+    all_index = pd.Index([f"{c}|{n}" for c, n in boards], name="row_key")
+    if wide.index.name != "row_key":
+        wide.index.name = "row_key"
     wide = wide.reindex(all_index)
-    df_today=pd.DataFrame(list(rows_today.values()))
-    if not df_today.empty: patch_today(wide, df_today, today_col, out_csv)
+
+    df_today = pd.DataFrame(list(rows_today.values()))
+    if not df_today.empty:
+        patch_today(wide, df_today, today_col, out_csv)
+    else:
+        print("[warn] nothing fetched; skip writing.")
+
     ok_n = sum(1 for v in rows_today.values() if v["pct_chg"] is not None)
     print(f"[summary] today (his): ok={ok_n}, fail={total-ok_n}, date={today_col}")
+
 
 # =============== CLI ===============
 def parse_args():
     ap = argparse.ArgumentParser(description="Batch TODAY via clist/get; full bootstrap via push2his when CSV absent.")
-    ap.add_argument("--fs", default=BOARD_FS)
-    ap.add_argument("--days", type=int, default=N_DAYS)
-    ap.add_argument("--out", default=OUTPUT_CSV)
-    ap.add_argument("--sleep", type=float, default=1.0)
-    ap.add_argument("--jitter", type=float, default=0.4)
-    ap.add_argument("--rpm", type=float, default=18.0)
-    ap.add_argument("--cooldown-after", type=int, default=4)
-    ap.add_argument("--cooldown-secs", type=float, default=8.0)
-    ap.add_argument("--timeout", type=float, default=4.5)
-    ap.add_argument("--pass2-timeout", type=float, default=9.0)
-    ap.add_argument("--pass2-sleep", type=float, default=2.0)
-    ap.add_argument("--verbose-http", action="store_true")
-    ap.add_argument("--today-mode", choices=["list","his"], default="list")
+    ap.add_argument("--fs", default=BOARD_FS, help="industry='m:90+t:2', concept='m:90+t:3', region='m:90+t:1'")
+    ap.add_argument("--days", type=int, default=N_DAYS, help="recent trading days for first full fetch")
+    ap.add_argument("--out", default=OUTPUT_CSV, help="output CSV path")
+
+    # 频控（主要用于基线 & 兼容 his 模式）
+    ap.add_argument("--sleep", type=float, default=5.0, help="base sleep seconds (Pass1)")
+    ap.add_argument("--jitter", type=float, default=0.4, help="random jitter seconds")
+    ap.add_argument("--rpm", type=float, default=10.0, help="max requests per minute (0=disable)")
+
+    # 稳健性
+    ap.add_argument("--cooldown-after", type=int, default=20, help="global cooldown after N consecutive fails")
+    ap.add_argument("--cooldown-secs", type=float, default=8.0, help="global cooldown seconds")
+    ap.add_argument("--timeout", type=float, default=10, help="per-request timeout seconds (Pass1)")
+
+    # Pass2（仅 his 模式会用到）
+    ap.add_argument("--pass2-timeout", type=float, default=9.0, help="per-request timeout seconds (Pass2)")
+    ap.add_argument("--pass2-sleep", type=float, default=2.0, help="base sleep seconds (Pass2)")
+
+    # HTTP 细节
+    ap.add_argument("--verbose-http", action="store_true", help="print each HTTP GET details")
+
+    # 今天抓取模式：list（默认，强烈推荐）/ his（逐板块历史接口，兼容用）
+    ap.add_argument("--today-mode", choices=["list","his"], default="list", help="how to fetch today's column")
     return ap.parse_args()
 
-if __name__=="__main__":
-    args=parse_args()
+
+if __name__ == "__main__":
+    args = parse_args()
     build_csv(
-        fs=args.fs, n_days=args.days, out_csv=args.out,
-        sleep_s=args.sleep, jitter_s=args.jitter, rpm=args.rpm,
-        cooldown_after=args.cooldown_after, cooldown_secs=args.cooldown_secs,
-        timeout_s=args.timeout, pass2_timeout=args.pass2_timeout, pass2_sleep=args.pass2_sleep,
-        verbose_http=args.verbose_http, today_mode=args.today_mode
+        fs=args.fs,
+        n_days=args.days,
+        out_csv=args.out,
+        sleep_s=args.sleep,
+        jitter_s=args.jitter,
+        rpm=args.rpm,
+        cooldown_after=args.cooldown_after,
+        cooldown_secs=args.cooldown_secs,
+        timeout_s=args.timeout,
+        pass2_timeout=args.pass2_timeout,
+        pass2_sleep=args.pass2_sleep,
+        verbose_http=args.verbose_http,
+        today_mode=args.today_mode,
     )

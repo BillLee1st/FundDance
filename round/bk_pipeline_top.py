@@ -17,7 +17,8 @@ from datetime import datetime
 # ================== 参数 ==================
 TOP_N_RANK = 30  # rank 页面 TOP
 TOP_N_RANGE = 20 # range 页面 TOP
-N_DAYS = 80
+N_DAYS = 90
+# LOOKBACK_LIST = [1, 5, 10, 20, 30, 60, 90]
 LOOKBACK_LIST = [1, 5]
 END_DATE = None
 
@@ -45,6 +46,24 @@ def prepare_data():
     key_split = df["row_key"].astype(str).str.split("|", n=1, expand=True)
     df["board_name"] = key_split[1].fillna(key_split[0]).str.strip()
 
+    # ===== 新增：过滤掉不需要的板块 =====
+    EXCLUDE_BOARDS = {
+        "昨日涨停_含一字",
+        "昨日连板_含一字",
+        "昨日涨停",
+        "昨日连板",
+        "次新股",
+        "注册制次新股",
+        "基金重仓",
+        "百元股",
+        "参股新三板",
+        "2025中报扭亏",
+        "2025三季报预增",
+        "并购重组概念",
+    }
+    df = df[~df["board_name"].isin(EXCLUDE_BOARDS)].reset_index(drop=True)
+    # ==========================================
+
     non_date = {"row_key", "board_code", "board_name"}
     raw_date_cols = [c for c in df.columns if c not in non_date]
     col_dt = pd.to_datetime(raw_date_cols, errors="coerce")
@@ -68,8 +87,11 @@ def prepare_data():
 
     # 解析 rank/pct/val
     parsed = {
-        c: pd.DataFrame(df[c].apply(parse_triplet).tolist(),
-                        columns=["rank", "pct", "val"], index=df.index)
+        c: pd.DataFrame(
+            df[c].apply(parse_triplet).tolist(),
+            columns=["rank", "pct", "val"],
+            index=df.index
+        )
         for c in display_cols
     }
 
@@ -85,9 +107,15 @@ def prepare_data():
                 "pct": p.at[i, "pct"],
                 "val": p.at[i, "val"]
             })
-    long_df = pd.DataFrame(records)
 
-    return long_df, display_dt, calc_dt
+    long_df = pd.DataFrame(records)
+    latest_date = display_dt[-1]  # display_dt 已经是排序后的日期列表
+    latest_date_str = latest_date.strftime("%m%d")
+    return long_df, display_dt, calc_dt, latest_date_str
+
+
+
+
 
 # ================== 累计涨幅计算 ==================
 def compute_cum_pct(long_df, calc_dt, LOOKBACK, top_n):
@@ -106,8 +134,8 @@ def compute_cum_pct(long_df, calc_dt, LOOKBACK, top_n):
     return top_boards, cum_pct
 
 # ================== rank 图 ==================
-def generate_rank_html(long_df, display_dt, calc_dt, LOOKBACK):
-    OUTPUT_HTML = f"html/rank_{today}_{LOOKBACK}.html"
+def generate_rank_html(long_df, display_dt, calc_dt, LOOKBACK, file_date_str):
+    OUTPUT_HTML = f"html/rank_con_{file_date_str}_{LOOKBACK}.html"
     top_boards, cum_pct = compute_cum_pct(long_df, calc_dt, LOOKBACK, TOP_N_RANK)
     board_order = top_boards
     df_plot = long_df[long_df["board_name"].isin(top_boards)]
@@ -115,23 +143,25 @@ def generate_rank_html(long_df, display_dt, calc_dt, LOOKBACK):
     monday_dt = [d for d in display_dt if d.weekday() == 0]
 
     # 名次颜色
-    MARK_TOP = 10
+    MARK_TOP = 15
     palette = qualitative.Set1 + qualitative.Set3 + qualitative.Bold + qualitative.Dark24
     rank_colors = {r: palette[(r-1)%len(palette)] for r in range(1, MARK_TOP+1)}
 
     fig = go.Figure()
 
     # Scatter 点
+    # Scatter 点
     for r in range(1, MARK_TOP+1):
         sub = df_plot[df_plot["rank"]==r]
         if sub.empty:
             continue
+        color = rank_colors[r] if r <= MARK_TOP else "rgba(0,0,0,0)"  # 前10彩色，其余透明
         fig.add_trace(go.Scatter(
             x=sub["date"],
             y=sub["board_name"],
             mode="markers",
-            name=f"第{r}名",
-            marker=dict(size=8, color=rank_colors[r]),
+            name=f"第{r}名" if r <= MARK_TOP else None,
+            marker=dict(size=8, color=color),
             customdata=np.stack([sub["rank"], sub["pct"], sub["val"]], axis=-1),
             hovertemplate=(
                 "版块：%{y}<br>"
@@ -140,8 +170,31 @@ def generate_rank_html(long_df, display_dt, calc_dt, LOOKBACK):
                 "涨跌幅：%{customdata[1]:.2%}<br>"
                 "指数：%{customdata[2]:,.2f}"
                 "<extra></extra>"
-            )
+            ),
+            showlegend=r <= MARK_TOP  # 只显示前10名的图例
         ))
+
+    # 处理不在前10的点
+    sub_other = df_plot[df_plot["rank"] > MARK_TOP]
+    if not sub_other.empty:
+        fig.add_trace(go.Scatter(
+            x=sub_other["date"],
+            y=sub_other["board_name"],
+            mode="markers",
+            name="其它",
+            marker=dict(size=6, color="rgba(0,0,0,0)"),  # 透明点
+            customdata=np.stack([sub_other["rank"], sub_other["pct"], sub_other["val"]], axis=-1),
+            hovertemplate=(
+                "版块：%{y}<br>"
+                "日期：%{x|%Y-%m-%d}<br>"
+                "名次：%{customdata[0]}<br>"
+                "涨跌幅：%{customdata[1]:.2%}<br>"
+                "指数：%{customdata[2]:,.2f}"
+                "<extra></extra>"
+            ),
+            showlegend=False
+        ))
+
 
     for d in display_dt:
         fig.add_vline(x=d, line_width=1, line_dash="dot", opacity=0.25)
@@ -217,8 +270,8 @@ def generate_rank_html(long_df, display_dt, calc_dt, LOOKBACK):
     print(f"[OK] rank HTML 已生成：{OUTPUT_HTML}")
 
 # ================== range 图 ==================
-def generate_range_html(long_df, display_dt, calc_dt, LOOKBACK):
-    OUTPUT_HTML = f"html/range_{today}_{LOOKBACK}.html"
+def generate_range_html(long_df, display_dt, calc_dt, LOOKBACK, file_date_str):
+    OUTPUT_HTML = f"html/range_con_{file_date_str}_{LOOKBACK}.html"
     top_boards, cum_pct = compute_cum_pct(long_df, calc_dt, LOOKBACK, TOP_N_RANGE)
     df_plot = long_df[long_df["board_name"].isin(top_boards)]
     board_order = top_boards
@@ -326,7 +379,7 @@ def generate_range_html(long_df, display_dt, calc_dt, LOOKBACK):
 
 # ================== 批量执行 ==================
 if __name__ == "__main__":
-    long_df, display_dt, calc_dt = prepare_data()
+    long_df, display_dt, calc_dt, latest_date_str = prepare_data()
     for lb in LOOKBACK_LIST:
-        generate_rank_html(long_df, display_dt, calc_dt, lb)
-        generate_range_html(long_df, display_dt, calc_dt, lb)
+        generate_rank_html(long_df, display_dt, calc_dt, lb, latest_date_str)
+        generate_range_html(long_df, display_dt, calc_dt, lb, latest_date_str)

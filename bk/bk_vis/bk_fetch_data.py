@@ -35,8 +35,9 @@ HEADERS = {
 
 LIST_URL   = "https://push2.eastmoney.com/api/qt/clist/get"           # 批量列表（今天用它）
 KLINE_URL  = "https://push2his.eastmoney.com/api/qt/stock/kline/get"  # 历史K线（仅基线）
-BOARD_FS   = "m:90+t:2"     # 行业
-OUTPUT_CSV = "bk_a_rank_pct_value.csv"
+# BOARD_FS   = "m:90+t:2"     # 行业
+BOARD_FS   = "m:90+t:3"     # concept
+OUTPUT_CSV = "bk_concept_value.csv"
 
 INTERRUPTED = False
 def _sigint_handler(signum, frame):
@@ -95,7 +96,7 @@ def http_get(session: requests.Session, url: str, params: dict, verbose_http: bo
 def fetch_board_list_basic(session: requests.Session, fs: str, verbose_http: bool) -> List[Tuple[str, str]]:
     """仅拿代码与名称（用于基线准备）"""
     params = {
-        "pn": 1, "pz": 500, "po": 1, "np": 1,
+        "pn": 1, "pz": 200, "po": 1, "np": 1,
         "fltt": 2, "invt": 2, "fid": "f3",
         "fs": fs,
         "fields": "f12,f14",
@@ -116,7 +117,7 @@ def fetch_board_list_today(session: requests.Session, fs: str, verbose_http: boo
       - f3 : 涨跌幅(%)
     """
     params = {
-        "pn": 1, "pz": 500, "po": 1, "np": 1,
+        "pn": 1, "pz": 200, "po": 1, "np": 1,
         "fltt": 2, "invt": 2, "fid": "f3",
         "fs": fs,
         "fields": "f12,f14,f2,f3",
@@ -243,6 +244,7 @@ def patch_today(wide: pd.DataFrame, df_today: pd.DataFrame, today_col: str, out_
 # =============== main ===============
 def build_csv(
     fs: str,
+    pz: int,
     n_days: int,
     out_csv: str,
     sleep_s: float,
@@ -461,6 +463,7 @@ if __name__ == "__main__":
     args = parse_args()
     build_csv(
         fs=args.fs,
+        pz=200,
         n_days=args.days,
         out_csv=args.out,
         sleep_s=args.sleep,
