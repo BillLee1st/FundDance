@@ -18,8 +18,8 @@ import plotly.express as px
 from plotly.subplots import make_subplots
 
 # ========== 基本配置 ==========
-INPUT  = "bk_concept_value.csv"
-OUTPUT = "html/vis_con_all.html"
+INPUT  = "data_concept.csv"
+OUTPUT = "html/vcon_all.html"
 TITLE  = "A股板块 · 排名 vs 净值（双轴）"
 YL     = "排名（越小越靠前）"
 YR     = "收盘净值"

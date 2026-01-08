@@ -23,7 +23,7 @@ LOOKBACK_LIST = [1, 5]
 END_DATE = None
 
 today = datetime.now().strftime("%m%d")
-INPUT_CSV = "data_daily.csv"
+INPUT_CSV = "data_industry.csv"
 
 # range 图专用参数
 BAR_DAY_FRACTION = 0.8
@@ -135,7 +135,7 @@ def compute_cum_pct(long_df, calc_dt, LOOKBACK, top_n):
 
 # ================== rank 图 ==================
 def generate_rank_html(long_df, display_dt, calc_dt, LOOKBACK, file_date_str):
-    OUTPUT_HTML = f"html/rank_con_{file_date_str}_{LOOKBACK}.html"
+    OUTPUT_HTML = f"html/kind{LOOKBACK}_{file_date_str}.html"
     top_boards, cum_pct = compute_cum_pct(long_df, calc_dt, LOOKBACK, TOP_N_RANK)
     board_order = top_boards
     df_plot = long_df[long_df["board_name"].isin(top_boards)]
@@ -143,7 +143,7 @@ def generate_rank_html(long_df, display_dt, calc_dt, LOOKBACK, file_date_str):
     monday_dt = [d for d in display_dt if d.weekday() == 0]
 
     # 名次颜色
-    MARK_TOP = 15
+    MARK_TOP = 10
     palette = qualitative.Set1 + qualitative.Set3 + qualitative.Bold + qualitative.Dark24
     rank_colors = {r: palette[(r-1)%len(palette)] for r in range(1, MARK_TOP+1)}
 
@@ -271,7 +271,7 @@ def generate_rank_html(long_df, display_dt, calc_dt, LOOKBACK, file_date_str):
 
 # ================== range 图 ==================
 def generate_range_html(long_df, display_dt, calc_dt, LOOKBACK, file_date_str):
-    OUTPUT_HTML = f"html/range_con_{file_date_str}_{LOOKBACK}.html"
+    OUTPUT_HTML = f"html/gind{LOOKBACK}_{file_date_str}.html"
     top_boards, cum_pct = compute_cum_pct(long_df, calc_dt, LOOKBACK, TOP_N_RANGE)
     df_plot = long_df[long_df["board_name"].isin(top_boards)]
     board_order = top_boards
