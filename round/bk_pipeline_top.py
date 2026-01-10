@@ -228,6 +228,7 @@ def generate_rank_html(long_df, display_dt, calc_dt, LOOKBACK, file_date_str):
             showgrid=True,
             gridcolor="rgba(0,0,0,0.15)",
             showspikes=True,
+            side='top',  # 关键修改：将x轴刻度移至顶部
             # autorange="reversed",
         ),
         yaxis=dict(
@@ -364,6 +365,7 @@ def generate_range_html(long_df, display_dt, calc_dt, LOOKBACK, file_date_str):
         tickmode="array",
         tickvals=monday_dt,
         tickformat="%m-%d",
+        side='top',  # 关键修改：将x轴刻度移至顶部
         # autorange="reversed",   # ★ 最新在左
     )
 
