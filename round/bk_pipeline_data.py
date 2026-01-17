@@ -16,6 +16,7 @@ import os, sys, time, math, random, argparse, signal
 from typing import List, Tuple, Optional, Dict
 from datetime import datetime
 from pandas.tseries.offsets import BDay
+import akshare as ak
 
 import requests
 from requests.adapters import HTTPAdapter
@@ -449,6 +450,20 @@ def patch_today(wide: pd.DataFrame, df_today: pd.DataFrame, today_col: str, out_
     print(f"[done] patched today({today_col}) into {out_csv}")
 
 
+def get_latest_trade_date():
+    today = datetime.now().strftime("%Y-%m-%d")
+    try:
+        trade_cal = ak.tool_trade_date_hist_sina()
+        trade_dates = trade_cal[trade_cal['trade_date'].notna()]['trade_date'].tolist()
+        trade_dates = [d.strftime("%Y-%m-%d") if hasattr(d, "strftime") else str(d) for d in trade_dates]
+        if today in trade_dates:
+            return today
+        for d in reversed(trade_dates):
+            if d < today:
+                return d
+    except Exception as e:
+        print(f"[WARN] 获取交易日失败，使用今天: {e}")
+    return today
 
 # =============== main ===============
 def build_csv(
@@ -468,21 +483,28 @@ def build_csv(
 ):
     session = build_session(timeout_s)
 
-    # today = datetime.now().date()
-    # today_str = today.strftime("%Y%m%d")
-    # today_col = today.strftime("%Y-%m-%d")
-        # 获取今天日期
-    now = datetime.now().date()
+    # # today = datetime.now().date()
+    # # today_str = today.strftime("%Y%m%d")
+    # # today_col = today.strftime("%Y-%m-%d")
+    #     # 获取今天日期
+    # now = datetime.now().date()
+    # # 假设东财接口返回的是最近交易日（若今天非交易日，返回前一个交易日）
+    # # pd.Timestamp + BDay(0) 会返回最近交易日（包括今天）
+    # last_trade_day = (pd.Timestamp(now) - BDay(0)).date()
+    # # 接口请求的日期字符串
+    # today_str = last_trade_day.strftime("%Y%m%d")
+    # # 对应写入的列名
+    # today_col = last_trade_day.strftime("%Y-%m-%d")
+    # print(f"[info] updating data for trading day: {today_col}")
 
-    # 假设东财接口返回的是最近交易日（若今天非交易日，返回前一个交易日）
-    # pd.Timestamp + BDay(0) 会返回最近交易日（包括今天）
-    last_trade_day = (pd.Timestamp(now) - BDay(0)).date()
 
-    # 接口请求的日期字符串
-    today_str = last_trade_day.strftime("%Y%m%d")
+        # ================== 获取最近交易日（统一入口） ==================
+    latest_trade_date_str = get_latest_trade_date()   # 'YYYY-MM-DD'
 
-    # 对应写入的列名
-    today_col = last_trade_day.strftime("%Y-%m-%d")
+    # 统一派生三个变量（保持原语义）
+    last_trade_day = datetime.strptime(latest_trade_date_str, "%Y-%m-%d").date()
+    today_col = latest_trade_date_str                 # 写入 DataFrame 的列名
+    today_str = last_trade_day.strftime("%Y%m%d")     # 接口参数
 
     print(f"[info] updating data for trading day: {today_col}")
 
