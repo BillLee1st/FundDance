@@ -5,15 +5,24 @@
 网页存储位置 round/html  按日期排序 找到最新文件
 
 图表类型1 Top数据 ++++++++++++++++++++++++++++++++++++
+
 kcon1_0128
+
 kcon5_0128
+
 gcon1_0128
+
 gcon5_0128
 
+
 kind1_0128
+
 kind5_0128
+
 gind1_0128
+
 gind5_0128
+
 
 con为概念板块 
 ind为行业版快
@@ -25,7 +34,9 @@ g为topN的涨跌数据柱状图
 5为近5天的累计数据
 
 数据源
+
 data_concept.csv
+
 data_industry.csv
 
 
@@ -38,13 +49,17 @@ data_industry.csv
 bk_day.xlsx
 
 bk_day_industry_rank.html
+
 bk_day_concept_rank.html
 
-rank	01-28	   info		
+rank	01-28	   info
+
 1	    黄金概念	7.51 / 5.78 / 66 / 4 / 湖南黄金
 
-板块数据格式                  
+板块数据格式
+
 涨跌幅 / 换手率 / 上涨个数 / 下跌个数 / 领涨股票
+
 7.51   / 5.78  / 66      / 4         / 湖南黄金
 
 数据源
