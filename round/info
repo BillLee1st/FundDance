@@ -3,6 +3,8 @@ ll
 
 cd round
 
-./command.sh
+./command_con.sh
+./command_day.sh
+./command_ind.sh
 
 ./round/command.sh
