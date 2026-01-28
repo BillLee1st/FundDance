@@ -29,6 +29,9 @@ data_concept.csv
 data_industry.csv
 
 
+
+
+
 图标类型2 全部排名数据  ++++++++++++++++++++++++++++++++++++++
 
 数据源
@@ -49,6 +52,8 @@ bk_day.xlsx
 
 
 
+
+
 图标类型3 全部板块排名折线图  +++++++++++++++++++++++++++++++
 
 vcon_all.html
@@ -56,6 +61,7 @@ vind_all.html
 
 实线和点为板块净值及走势
 虚线和点为板块排名顺序及涨跌幅标注
+
 
 
 
@@ -70,14 +76,18 @@ cd round
 #执行对应脚本           
 
 #只更新概念板块数据
+
 command_con.sh
 
 #只更新行业板块数据
+
 command_ind.sh
 
 #只更新bk_day图表excel数据
+
 command_day.sh
 
 #更新所有数据
+
 command.sh   
 
