@@ -1,0 +1,76 @@
+{================= ① 5/1日试盘线 =================}
+
+当天波动足够 := (HIGH - LOW) / LOW >= 0.03;   {当日最高-最低 ≥ 4%}
+回落受控 := (HIGH - CLOSE) / HIGH <= 0.03;   {收盘价回落 ≤ 3%}
+
+LIMITUP1 := C = H AND (C / REF(C,1) - 1) >= 0.090;
+当日不是涨停 := NOT(LIMITUP1);
+
+
+试盘线 := 当天波动足够 AND 回落受控 AND 当日不是涨停;
+
+
+{近5日至少一个试盘线}
+试盘日 := COUNT(试盘线, 5) >= 1;
+
+当天上涨 := OPEN < CLOSE;
+
+{================= ② 最近N交易日股价波动不超过30% =================}
+N := 90;
+波动1 := (HHV(H,N) - LLV(L,N)) / LLV(L,N) <= 0.30;
+波动2 := (HHV(C,N) - LLV(C,N)) / LLV(C,N) <= 0.30;
+波动3 := (C - LLV(C,N)) / LLV(C,N) <= 0.30;
+{近N日波动 := 波动1 AND 波动2 AND 波动3;}
+近N日波动 := 波动1 AND 波动2 AND 波动3;
+
+
+
+{换手率}
+区间换手 := SUM(HSL,120);
+换手充足 := 区间换手 >= 150;
+
+
+
+{—— 近10日至少1次涨停 ——}
+LIMITUP := C = H AND (C / REF(C,1) - 1) >= 0.090;
+有涨停日 := COUNT(LIMITUP, 20) >= 1;
+
+
+流通市值亿:=FINANCE(40)/100000000;
+
+流通市值  := 流通市值亿 > 40;
+
+
+{—— 主板股票 ——}
+MB :=
+    NOT(
+        CODELIKE('300')
+        OR CODELIKE('688')
+        OR CODELIKE('689')
+        OR CODELIKE('787')
+        OR CODELIKE('8')
+    );
+
+
+{KDJ 日线多头}
+{DKDJ := KDJ.K#DAY > KDJ.D#DAY;}
+DKDJ := KDJ.K#DAY > REF(KDJ.D#DAY, 1);
+
+{周线处于多头}
+WKDJ := KDJ.K#WEEK > KDJ.D#WEEK;
+
+{月线不走坏}
+MKDJ := KDJ.K#MONTH > KDJ.D#MONTH;
+
+KDJ := WKDJ AND MKDJ;
+
+
+TREND := KDJ;
+
+
+
+{================= ③ 综合条件 =================}
+
+选股条件 := 试盘日 AND 近N日波动 AND 换手充足 AND MB AND 流通市值 AND TREND AND 有涨停日;
+
+选股条件;
