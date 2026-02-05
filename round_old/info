@@ -1,0 +1,12 @@
+
+ll
+
+cd round
+
+./command_con.sh
+./command_day_con.sh
+./command_day_ind.sh
+./command_ind.sh
+
+./command.sh
+./round/command.sh
