@@ -10,6 +10,12 @@ A股板块抓取（Eastmoney，批量抓“今天” + 稳健二轮 + 基线建�
 - 二轮补抓：仅用于“基线”或你切换到 his 模式时；默认今天用批量抓无需二轮
 - 日志：每个阶段打印单行日志；支持 --verbose-http 打印 HTTP 细节
 - Ctrl+C：中断时已获取的数据也会写回今天列
+
+| 字段   | f12           | f14           | f2           | f3     | f8     | f104 | f105 | f128        |
+| ---- | ------------- | ------------- | ------------ | ------ | ------ | ---- | ---- | ----------- |
+| 描述   | 板块代码（bk_code） | 板块名称（bk_name） | 最新价（收盘价/盘中价） | 涨跌幅(%) | 换手率(%) | 涨家家数 | 跌家家数 | 龙头股（leader） |
+| 数据类型 | str           | str           | float        | float  | float  | int  | int  | str         |
+| 示例   | 885301        | 半导体           | 12.34        | 3.25   | 1.23   | 8    | 2    | "中芯国际"      |
 """
 
 import os, sys, time, math, random, argparse, signal
@@ -331,8 +337,8 @@ def fmt_cell(rank, pct, close, turnover=None, up=None, down=None, leader=None):
         c = f"{close:.4f}".rstrip("0").rstrip(".")
 
     t = "" if turnover is None or (isinstance(turnover, float) and math.isnan(turnover)) else f"{turnover:.2f}"
-    u = "" if up in (None, "") else str(up)
-    d = "" if down in (None, "") else str(down)
+    u = "0" if up in (None, "") else str(up)
+    d = "0" if down in (None, "") else str(down)
     l = "" if not leader else str(leader)
 
     parts = [r, p, c, t, u, d, l]
