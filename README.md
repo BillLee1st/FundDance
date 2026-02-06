@@ -40,20 +40,6 @@ data_concept.csv
 data_industry.csv
 
 
-
-
-
-图标类型2 全部排名数据  ++++++++++++++++++++++++++++++++++++++
-
-数据源
-bk_day.xlsx
-
-bk_day_industry_rank.html
-
-bk_day_concept_rank.html
-
-rank	01-28	   info
-
 1	    黄金概念	7.51 / 5.78 / 66 / 4 / 湖南黄金
 
 板块数据格式
@@ -61,21 +47,6 @@ rank	01-28	   info
 涨跌幅 / 换手率 / 上涨个数 / 下跌个数 / 领涨股票
 
 7.51   / 5.78  / 66      / 4         / 湖南黄金
-
-数据源
-bk_day.xlsx
-
-
-
-
-
-图标类型3 全部板块排名折线图  +++++++++++++++++++++++++++++++
-
-vcon_all.html
-vind_all.html
-
-实线和点为板块净值及走势
-虚线和点为板块排名顺序及涨跌幅标注
 
 
 
@@ -98,9 +69,6 @@ command_con.sh
 
 command_ind.sh
 
-#只更新bk_day图表excel数据
-
-command_day.sh
 
 #更新所有数据
 
