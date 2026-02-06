@@ -1,3 +1,5 @@
+#在数据过多时 用以截取最近N日数据
+
 import pandas as pd
 import os
 from shutil import copyfile

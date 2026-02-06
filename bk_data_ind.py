@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+# 获取行业板块数据
+
 """
 A股板块抓取（Eastmoney，批量抓“今天” + 稳健二轮 + 基线建一次）
 - CSV 不存在（基线）：抓最近 N 天（push2his），建立全量历史（一次性）

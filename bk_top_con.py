@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+
+# 生成概念板块html
+
 """
 综合版块可视化：
 1) rank_*_*.html：Scatter 点 + 名次颜色 + 右侧累计涨幅
