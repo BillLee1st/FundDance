@@ -47,7 +47,7 @@ LIST_URL   = "https://push2.eastmoney.com/api/qt/clist/get"           # 批量�
 KLINE_URL  = "https://push2his.eastmoney.com/api/qt/stock/kline/get"  # 历史K线（仅基线）
 # BOARD_FS   = "m:90+t:2"     # 行业
 BOARD_FS   = "m:90+t:3"     # 概念
-OUTPUT_CSV = "data_concept.csv"
+OUTPUT_CSV = "data/data_concept.csv"
 
 INTERRUPTED = False
 def _sigint_handler(signum, frame):

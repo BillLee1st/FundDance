@@ -4,10 +4,10 @@ import pandas as pd
 import os
 from shutil import copyfile
 
-CSV_PATH = "data_concept.csv"
-BACKUP_PATH = "data_concept_bk.csv"
-# CSV_PATH = "data_industry.csv"
-# BACKUP_PATH = "data_industry_bk.csv"
+CSV_PATH = "data/data_concept.csv"
+BACKUP_PATH = "data/data_concept_bk.csv"
+# CSV_PATH = "data/data_industry.csv"
+# BACKUP_PATH = "data/data_industry_bk.csv"
 KEEP_DAYS = 90   # 保留最近90个交易日
 
 

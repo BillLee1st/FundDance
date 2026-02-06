@@ -26,7 +26,7 @@ LOOKBACK_LIST = [1, 5]
 END_DATE = None
 
 today = datetime.now().strftime("%m%d")
-INPUT_CSV = "data_industry.csv"
+INPUT_CSV = "data/data_industry.csv"
 
 # range 图专用参数
 BAR_DAY_FRACTION = 0.8
@@ -170,7 +170,11 @@ def compute_cum_pct(long_df, calc_dt, LOOKBACK, top_n):
 
 # ================== rank 图 ==================
 def generate_rank_html(long_df, display_dt, calc_dt, LOOKBACK, file_date_str):
-    output_dir = f"html/{file_date_str}"
+    # output_dir = f"html/{file_date_str}"
+    # os.makedirs(output_dir, exist_ok=True)
+    month_str = file_date_str[:2]   # "02"
+    day_str = file_date_str[2:]    # "05"
+    output_dir = f"html/{month_str}/{day_str}"
     os.makedirs(output_dir, exist_ok=True)
     OUTPUT_HTML = f"{output_dir}/ind_dot_{LOOKBACK}_{file_date_str}.html"
     top_boards, cum_pct = compute_cum_pct(long_df, calc_dt, LOOKBACK, TOP_N_RANK)
@@ -344,7 +348,11 @@ def generate_rank_html(long_df, display_dt, calc_dt, LOOKBACK, file_date_str):
 
 # ================== range 图 ==================
 def generate_range_html(long_df, display_dt, calc_dt, LOOKBACK, file_date_str):
-    output_dir = f"html/{file_date_str}"
+    # output_dir = f"html/{file_date_str}"
+    # os.makedirs(output_dir, exist_ok=True)
+    month_str = file_date_str[:2]   # "02"
+    day_str = file_date_str[2:]    # "05"
+    output_dir = f"html/{month_str}/{day_str}"
     os.makedirs(output_dir, exist_ok=True)
     OUTPUT_HTML = f"{output_dir}/ind_bar_{LOOKBACK}_{file_date_str}.html"
     top_boards, cum_pct = compute_cum_pct(long_df, calc_dt, LOOKBACK, TOP_N_RANGE)
