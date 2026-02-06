@@ -30,8 +30,6 @@ git push
 
 
 
-
-
 以下为初始化步骤 不需要执行
 环境创建
 conda create --name fund311 python=3.11

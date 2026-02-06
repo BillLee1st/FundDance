@@ -34,7 +34,7 @@ data_concept.csv
 data_industry.csv
 
 
-板块数据格式
+数据源板块数据格式
 
 排名| 涨跌幅 | 净值 | 换手率 | 上涨个数 | 下跌个数 | 领涨股票
 
