@@ -1,39 +1,33 @@
 
-板块轮动数据
-所有数据在round目录下
+板块轮动可视化
 
-网页存储位置 round/html  按日期排序 找到最新文件
+网页存储位置 html/
 
-图表类型1 Top数据 ++++++++++++++++++++++++++++++++++++
+图表类型 Top数据 ++++++++++++++++++++++++++++++
 
-kcon1_0128
-
-kcon5_0128
-
-gcon1_0128
-
-gcon5_0128
+con_dot_1_0128
 
 
-kind1_0128
-
-kind5_0128
-
-gind1_0128
-
-gind5_0128
+con_dot_5_0128
 
 
-con为概念板块 
+ind_dot_1_0128
+
+
+ind_dot_5_0128
+
+
+
+con为概念板块   
 ind为行业版快
 
-k为topN的排名点云分布图
-g为topN的涨跌数据柱状图
+dot为topN的排名点云分布图   
+bar为topN的涨跌数据柱状图
 
-1为当天的数据
+1为当天的数据    
 5为近5天的累计数据
 
-数据源
+数据源  
 
 data_concept.csv
 
@@ -55,20 +49,19 @@ data_industry.csv
 注 东方财富数据接口每小时限制调用1次 优先更新概念板块
 
 #进入目录
-cd round
 
 #执行对应脚本           
 
 #只更新概念板块数据
 
-command_con.sh
+./command_con.sh
 
 #只更新行业板块数据
 
-command_ind.sh
+./command_ind.sh
 
 
 #更新所有数据
 
-command.sh   
+./command.sh   
 

@@ -1,0 +1,123 @@
+
+
+
+{KDJ 日线多头}
+DKDJ := KDJ.K#DAY > KDJ.D#DAY
+
+{周线处于多头}
+WKDJ := AND KDJ.K#WEEK > KDJ.D#WEEK
+
+{月线不走坏}
+MKDJ := AND KDJ.K#MONTH > KDJ.D#MONTH;
+
+KDJ := DKDJ AND WKDJ AND MKDJ
+
+
+
+DIFF#DAY   > 0 AND DIFF#DAY   > REF(DIFF#DAY,1)
+AND
+DIFF#WEEK  > 0 AND DIFF#WEEK  > REF(DIFF#WEEK,1)
+AND
+DIFF#MONTH > 0 AND DIFF#MONTH > REF(DIFF#MONTH,1);
+
+
+
+
+
+
+{================ MACD（日 / 周 / 月） =================}
+D_MACD := MACD > 0 AND MACD > REF(MACD,1);
+
+W_MACD := MACD#WEEK > 0 AND MACD#WEEK > REF(MACD#WEEK,1);
+
+M_MACD := MACD#MONTH > 0 AND MACD#MONTH > REF(MACD#MONTH,1);
+
+D_MACD AND W_MACD AND M_MACD
+
+
+
+
+
+D_MACD := MACD > 0 AND MACD > REF(MACD,1);
+
+W_MACD := MACD#WEEK > 0 AND MACD#WEEK > REF(MACD#WEEK,1);
+
+M_MACD := MACD#MONTH > 0 AND MACD#MONTH > REF(MACD#MONTH,1);
+
+D_MACD AND W_MACD AND M_MACD;
+
+
+{================ MACD（日 / 周 / 月） =================}
+D_MACD := MACD > 0 AND MACD > REF(MACD,1);
+
+W_MACD := MACD#WEEK > 0 AND MACD#WEEK > REF(MACD#WEEK,1);
+
+M_MACD := MACD#MONTH > 0 AND MACD#MONTH > REF(MACD#MONTH,1);
+
+{================ KDJ（日 / 周 / 月） =================}
+D_K := K > REF(K,1);
+
+W_K := K#WEEK > REF(K#WEEK,1);
+
+M_K := K#MONTH > REF(K#MONTH,1);
+
+{================ 最终条件 =================}
+D_MACD AND W_MACD AND M_MACD
+AND
+D_K AND W_K AND M_K;
+
+
+
+
+日KDJ_K:= "KDJ.K#DAY";
+日KDJ_D:= "KDJ.D#DAY";
+
+周KDJ_K:= "KDJ.K#WEEK";
+周KDJ_D:= "KDJ.D#WEEK";
+
+日KDJ向上:= 日KDJ_K > 日KDJ_D AND 日KDJ_K > REF(日KDJ_K,1);
+周KDJ向上:= 周KDJ_K > 周KDJ_D AND 周KDJ_K > REF(周KDJ_K,1);
+
+日KDJ向上 AND 周KDJ向上;
+
+
+{参数设置}
+N1:=9;   {KDJ周期}
+N2:=3;
+N3:=3;
+
+{日线指标}
+日KDJ_K:= "KDJ.K#DAY"(N1,N2,N3);
+日KDJ_D:= "KDJ.D#DAY"(N1,N2,N3);
+日MACD_DIF:= "MACD.DIF#DAY"(12,26,9);
+日MACD_DEA:= "MACD.DEA#DAY"(12,26,9);
+
+{周线指标}
+周KDJ_K:= "KDJ.K#WEEK"(N1,N2,N3);
+周KDJ_D:= "KDJ.D#WEEK"(N1,N2,N3);
+周MACD_DIF:= "MACD.DIF#WEEK"(12,26,9);
+周MACD_DEA:= "MACD.DEA#WEEK"(12,26,9);
+
+{月线指标}
+月KDJ_K:= "KDJ.K#MONTH"(N1,N2,N3);
+月KDJ_D:= "KDJ.D#MONTH"(N1,N2,N3);
+月MACD_DIF:= "MACD.DIF#MONTH"(12,26,9);
+月MACD_DEA:= "MACD.DEA#MONTH"(12,26,9);
+
+{趋势判断逻辑}
+{日线趋势：KDJ向上（K>D且K值上升）& MACD向上（DIF>DEA且DIF上升）}
+日KDJ向上:= 日KDJ_K > 日KDJ_D AND 日KDJ_K > REF(日KDJ_K,1);
+日MACD向上:= 日MACD_DIF > 日MACD_DEA AND 日MACD_DIF > REF(日MACD_DIF,1);
+
+{周线趋势：同上}
+周KDJ向上:= 周KDJ_K > 周KDJ_D AND 周KDJ_K > REF(周KDJ_K,1);
+周MACD向上:= 周MACD_DIF > 周MACD_DEA AND 周MACD_DIF > REF(周MACD_DIF,1);
+
+{月线趋势：同上}
+月KDJ向上:= 月KDJ_K > 月KDJ_D AND 月KDJ_K > REF(月KDJ_K,1);
+月MACD向上:= 月MACD_DIF > 月MACD_DEA AND 月MACD_DIF > REF(月MACD_DIF,1);
+
+{综合选股条件}
+选股: 日KDJ向上 AND 日MACD向上 AND
+      周KDJ向上 AND 周MACD向上 AND
+      月KDJ向上 AND 月MACD向上;

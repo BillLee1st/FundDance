@@ -1,0 +1,55 @@
+在项目根目录fund_dance位置下(打开时默认的位置)
+
+1 数据更新方式
+更新概念板块数据
+./command_con.sh
+
+更新行业板块数据
+./command_ind.sh
+
+
+
+2 数据推送到github
+在目录fund_dance位置下
+
+拉取远端代码到本地
+git pull
+
+状态查看
+git status
+
+添加改动文件
+git add .
+
+提交改动
+git commit -m "update"
+
+推送到远端
+git push
+
+
+
+
+
+
+以下为初始化步骤 不需要执行
+环境创建
+conda create --name fund311 python=3.11
+
+环境激活
+conda activate fund311
+
+环境关闭
+conda deactivate
+
+安装包
+pip install -r requirements.txt
+或者
+conda install --yes --file requirements.txt
+
+代理配置
+git config --global --get http.proxy
+git config --global --get https.proxy
+
+git config --global --unset http.proxy
+git config --global --unset https.proxy
