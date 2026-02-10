@@ -7,6 +7,8 @@
 更新行业板块数据
 ./command_ind.sh
 
+同时更新两种板块
+./command.sh
 
 
 2 数据推送到github
