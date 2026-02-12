@@ -22,6 +22,7 @@ from datetime import datetime
 TOP_N_RANK = 30  # rank 页面 TOP
 TOP_N_RANGE = 20 # range 页面 TOP
 N_DAYS = 90
+MARK_TOP = 15    # add color to top N
 # LOOKBACK_LIST = [1, 5, 10, 20, 30, 60, 90]
 LOOKBACK_LIST = [1, 5]
 END_DATE = None
@@ -32,15 +33,6 @@ BAR_DAY_FRACTION = 0.8
 ROW_HALF_HEIGHT = 0.45
 
 # ================== 工具函数 ==================
-# def parse_triplet(cell):
-#     if pd.isna(cell):
-#         return (np.nan, np.nan, np.nan)
-#     try:
-#         r, p, v = str(cell).split("|")
-#         r = int(float(r)) if float(r) > 0 else np.nan
-#         return r, float(p)/100.0, float(v)
-#     except Exception:
-#         return (np.nan, np.nan, np.nan)
 def parse_triplet(cell):
     if pd.isna(cell):
         return (np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, "")
@@ -116,7 +108,6 @@ def prepare_data():
     parsed = {
         c: pd.DataFrame(
             df[c].apply(parse_triplet).tolist(),
-            # columns=["rank", "pct", "val"],
             columns=["rank", "pct", "val", "turnover", "up", "down", "leader"],
             index=df.index
         )
@@ -140,21 +131,10 @@ def prepare_data():
                 "leader": p.at[i, "leader"],
             })
 
-            # records.append({
-            #     "date": d,
-            #     "board_name": df.at[i, "board_name"],
-            #     "rank": p.at[i, "rank"],
-            #     "pct": p.at[i, "pct"],
-            #     "val": p.at[i, "val"]
-            # })
-
     long_df = pd.DataFrame(records)
     latest_date = display_dt[-1]  # display_dt 已经是排序后的日期列表
     latest_date_str = latest_date.strftime("%m%d")
     return long_df, display_dt, calc_dt, latest_date_str
-
-
-
 
 
 # ================== 累计涨幅计算 ==================
@@ -175,9 +155,6 @@ def compute_cum_pct(long_df, calc_dt, LOOKBACK, top_n):
 
 # ================== rank 图 ==================
 def generate_rank_html(long_df, display_dt, calc_dt, LOOKBACK, file_date_str):
-    # output_dir = f"html/{file_date_str}"
-    # os.makedirs(output_dir, exist_ok=True)
-
     month_str = file_date_str[:2]   # "02"
     day_str = file_date_str[2:]    # "05"
     output_dir = f"html/{month_str}/{day_str}"
@@ -191,13 +168,11 @@ def generate_rank_html(long_df, display_dt, calc_dt, LOOKBACK, file_date_str):
     monday_dt = [d for d in display_dt if d.weekday() == 0]
 
     # 名次颜色
-    MARK_TOP = 15
     palette = qualitative.Set1 + qualitative.Set3 + qualitative.Bold + qualitative.Dark24
     rank_colors = {r: palette[(r-1)%len(palette)] for r in range(1, MARK_TOP+1)}
 
     fig = go.Figure()
 
-    # Scatter 点
     # Scatter 点
     for r in range(1, MARK_TOP+1):
         sub = df_plot[df_plot["rank"]==r]
@@ -210,27 +185,16 @@ def generate_rank_html(long_df, display_dt, calc_dt, LOOKBACK, file_date_str):
             mode="markers",
             name=f"第{r}名" if r <= MARK_TOP else None,
             marker=dict(size=8, color=color),
-            # customdata=np.stack([sub["rank"], sub["pct"], sub["val"]], axis=-1),
             customdata=np.stack([
                 sub["rank"], sub["pct"], sub["val"],
                 sub["turnover"], sub["up"], sub["down"], sub["leader"]
             ], axis=-1),
-
-            # hovertemplate=(
-            #     "版块：%{y}<br>"
-            #     "日期：%{x|%Y-%m-%d}<br>"
-            #     "名次：%{customdata[0]}<br>"
-            #     "涨跌幅：%{customdata[1]:.2%}<br>"
-            #     "指数：%{customdata[2]:,.2f}"
-            #     "<extra></extra>"
-            # ),
-
             hovertemplate=(
                 "版块：%{y}<br>"
                 "日期：%{x|%Y-%m-%d}<br>"
                 "名次：%{customdata[0]}<br>"
                 "涨跌幅：%{customdata[1]:.2%}<br>"
-                "指数：%{customdata[2]:,.2f}<br>"
+                # "指数：%{customdata[2]:,.2f}<br>"
                 "换手率：%{customdata[3]:.2f}%<br>"
                 "上涨家数：%{customdata[4]}<br>"
                 "下跌家数：%{customdata[5]}<br>"
@@ -250,26 +214,16 @@ def generate_rank_html(long_df, display_dt, calc_dt, LOOKBACK, file_date_str):
             mode="markers",
             name="其它",
             marker=dict(size=6, color="rgba(0,0,0,0)"),  # 透明点
-            # customdata=np.stack([sub_other["rank"], sub_other["pct"], sub_other["val"]], axis=-1),
             customdata=np.stack([
                 sub_other["rank"], sub_other["pct"], sub_other["val"],
                 sub_other["turnover"], sub_other["up"], sub_other["down"], sub_other["leader"]
             ], axis=-1),
-            
-            # hovertemplate=(
-            #     "版块：%{y}<br>"
-            #     "日期：%{x|%Y-%m-%d}<br>"
-            #     "名次：%{customdata[0]}<br>"
-            #     "涨跌幅：%{customdata[1]:.2%}<br>"
-            #     "指数：%{customdata[2]:,.2f}"
-            #     "<extra></extra>"
-            # ),
             hovertemplate=(
                 "版块：%{y}<br>"
                 "日期：%{x|%Y-%m-%d}<br>"
                 "名次：%{customdata[0]}<br>"
                 "涨跌幅：%{customdata[1]:.2%}<br>"
-                "指数：%{customdata[2]:,.2f}<br>"
+                # "指数：%{customdata[2]:,.2f}<br>"
                 "换手率：%{customdata[3]:.2f}%<br>"
                 "上涨家数：%{customdata[4]}<br>"
                 "下跌家数：%{customdata[5]}<br>"
@@ -357,8 +311,6 @@ def generate_rank_html(long_df, display_dt, calc_dt, LOOKBACK, file_date_str):
 
 # ================== range 图 ==================
 def generate_range_html(long_df, display_dt, calc_dt, LOOKBACK, file_date_str):
-    # output_dir = f"html/{file_date_str}"
-    # os.makedirs(output_dir, exist_ok=True)
     month_str = file_date_str[:2]   # "02"
     day_str = file_date_str[2:]    # "05"
     output_dir = f"html/{month_str}/{day_str}"
@@ -398,17 +350,11 @@ def generate_range_html(long_df, display_dt, calc_dt, LOOKBACK, file_date_str):
         ))
         hover_x.append(r["date"])
         hover_y.append(y1)
-        # hover_text.append(
-        #     f"版块：{r['board_name']}<br>"
-        #     f"日期：{r['date'].date()}<br>"
-        #     f"涨跌幅：{r['pct']:+.2%}<br>"
-        #     f"指数：{r['val']:,.2f}"
-        # )
         hover_text.append(
             f"版块：{r['board_name']}<br>"
             f"日期：{r['date'].date()}<br>"
             f"涨跌幅：{r['pct']:+.2%}<br>"
-            f"指数：{r['val']:,.2f}<br>"
+            # f"指数：{r['val']:,.2f}<br>"
             f"换手率：{r['turnover']:.2f}%<br>"
             f"上涨家数：{int(r['up']) if pd.notna(r['up']) else ''}<br>"
             f"下跌家数：{int(r['down']) if pd.notna(r['down']) else ''}<br>"
