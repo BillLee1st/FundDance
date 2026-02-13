@@ -196,8 +196,8 @@ def fetch_board_list_today(
             "invt": 2,
             "fid": "f3",
             "fs": fs,
-            "fields": "f12,f14,f2,f3",
-            # "fields": "f12,f14,f2,f3,f8,f104,f105,f128",
+            # "fields": "f12,f14,f2,f3",
+            "fields": "f12,f14,f2,f3,f8,f104,f105,f128",
         }
 
         r = http_get(session, LIST_URL, params, verbose_http)
