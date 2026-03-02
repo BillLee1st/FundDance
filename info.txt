@@ -3,10 +3,12 @@
 1 数据更新方式
 更新概念板块数据
 ./command_con.sh
+python bk_data_con.py
 python bk_top_con.py
 
 更新行业板块数据
 ./command_ind.sh
+python bk_data_ind.py
 python bk_top_ind.py
 
 同时更新两种板块
