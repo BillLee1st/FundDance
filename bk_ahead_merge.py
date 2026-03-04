@@ -22,7 +22,7 @@ def merge_only_duplicate_boards(csv_path):
     # ==========================
     # 1️⃣ 备份原文件
     # ==========================
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    timestamp = datetime.now().strftime("%Y%m%d")
     dir_name = os.path.dirname(csv_path)
     base_name = os.path.basename(csv_path)
     name_no_ext, ext = os.path.splitext(base_name)
@@ -138,5 +138,3 @@ if __name__ == "__main__":
     input_file = "data/data_concept.csv"  # 替换为你的CSV文件路径
 
     merge_only_duplicate_boards(input_file)
-
-
