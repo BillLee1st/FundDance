@@ -24,7 +24,7 @@ TOP_N_RANGE = 20 # range 页面 TOP
 N_DAYS = 90
 MARK_TOP = 15    # add color to top N
 # LOOKBACK_LIST = [1, 5, 10, 20, 30, 60, 90]
-LOOKBACK_LIST = [1, 5]
+LOOKBACK_LIST = [1, 3, 5]
 END_DATE = None
 INPUT_CSV = "data/data_concept.csv"
 
