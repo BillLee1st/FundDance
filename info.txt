@@ -18,13 +18,13 @@ python bk_top_ind.py
 2 数据推送到github
 在目录fund_dance位置下
 
+状态查看
+git status
+
 git add . && git commit -m "update" && git push
 
 拉取远端代码到本地
 git pull
-
-状态查看
-git status
 
 添加改动文件
 git add .
