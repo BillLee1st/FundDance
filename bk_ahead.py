@@ -1,14 +1,34 @@
 #在数据过多时 用以截取最近N日数据
+# python bk_ahead.py
 
+from datetime import datetime
+import shutil
 import pandas as pd
 import os
 from shutil import copyfile
 
-CSV_PATH = "data/data_concept.csv"
-BACKUP_PATH = "data/data_concept_bk.csv"
-# CSV_PATH = "data/data_industry.csv"
-# BACKUP_PATH = "data/data_industry_bk.csv"
+# CSV_PATH = "data/data_concept.csv"
+CSV_PATH = "data/data_industry.csv"
 KEEP_DAYS = 90   # 保留最近90个交易日
+
+
+
+def backup_csv():
+        # ==========================
+    # 1️⃣ 备份原文件
+    # ==========================
+    timestamp = datetime.now().strftime("%Y%m%d")
+    dir_name = os.path.dirname(CSV_PATH)
+    base_name = os.path.basename(CSV_PATH)
+    name_no_ext, ext = os.path.splitext(base_name)
+
+    backup_file = os.path.join(
+        dir_name,
+        f"{name_no_ext}_{timestamp}{ext}"
+    )
+
+    shutil.copy2(CSV_PATH, backup_file)
+    print(f"已备份原文件 → {backup_file}")
 
 
 def main():
@@ -17,9 +37,10 @@ def main():
         return
 
     # ========= 1️⃣ 备份 =========
-    print("🔹 备份原始文件...")
-    copyfile(CSV_PATH, BACKUP_PATH)
-    print(f"✅ 已备份为 {BACKUP_PATH}")
+    # print("🔹 备份原始文件...")
+    # copyfile(CSV_PATH, BACKUP_PATH)
+    # print(f"✅ 已备份为 {BACKUP_PATH}")
+    backup_csv()
 
     # ========= 2️⃣ 读取 =========
     print("🔹 读取CSV...")
