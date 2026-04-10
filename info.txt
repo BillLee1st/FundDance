@@ -21,7 +21,7 @@ python bk_top_ind.py
 状态查看
 git status
 
-git add . && git commit -m "update" && git push
+git status && git add . && git commit -m "update" && git push
 
 拉取远端代码到本地
 git pull
